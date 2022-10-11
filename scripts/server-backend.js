@@ -1,47 +1,47 @@
-const IP_ADDRESS = "192.168.0.132";
+const IP_ADDRESS = '192.168.0.132';
 
-const path = require("path");
+const path = require('path');
 
-const config = require("./config/config");
-const HelperBackendService = require("./services/HelperBackendService");
-const ReadOnlyBackendService = require("./services/ReadOnlyBackendService");
-const WhiteboardInfoBackendService = require("./services/WhiteboardInfoBackendService");
-const { getSafeFilePath } = require("./utils");
+const config = require('./config/config');
+const HelperBackendService = require('./services/HelperBackendService');
+const ReadOnlyBackendService = require('./services/ReadOnlyBackendService');
+const WhiteboardInfoBackendService = require('./services/WhiteboardInfoBackendService');
+const { getSafeFilePath } = require('./utils');
 
 function startBackendServer(port) {
-    var fs = require("fs-extra");
-    var express = require("express");
-    var formidable = require("formidable"); //form upload processing
+    var fs = require('fs-extra');
+    var express = require('express');
+    var formidable = require('formidable'); //form upload processing
 
-    const createDOMPurify = require("dompurify"); //Prevent xss
-    const { JSDOM } = require("jsdom");
-    const window = new JSDOM("").window;
+    const createDOMPurify = require('dompurify'); //Prevent xss
+    const { JSDOM } = require('jsdom');
+    const window = new JSDOM('').window;
     const DOMPurify = createDOMPurify(window);
 
-    const { createClient } = require("webdav");
+    const { createClient } = require('webdav');
 
-    var s_whiteboard = require("./s_whiteboard.js");
+    var s_whiteboard = require('./s_whiteboard.js');
 
     var app = express();
 
-    var server = require("http").Server(app);
+    var server = require('http').Server(app);
     server.listen(port);
-    var io = require("socket.io")(server, {
-        path: "/ws-api",
+    var io = require('socket.io')(server, {
+        path: '/ws-api',
         cors: {
-            origin: [`http://${IP_ADDRESS}:3000`, "http://localhost:3000"],
-            methods: ["GET", "POST"],
+            origin: [`http://${IP_ADDRESS}:3000`, 'http://localhost:3000'],
+            methods: ['GET', 'POST'],
         },
     });
     WhiteboardInfoBackendService.start(io);
 
-    console.log("socketserver running on port:" + port);
+    console.log('socketserver running on port:' + port);
 
     const { accessToken, enableWebdav } = config.backend;
 
     //Expose static folders
-    app.use(express.static(path.join(__dirname, "..", "dist")));
-    app.use("/uploads", express.static(path.join(__dirname, "..", "public", "uploads")));
+    app.use(express.static(path.join(__dirname, '..', 'dist')));
+    app.use('/uploads', express.static(path.join(__dirname, '..', 'public', 'uploads')));
 
     /**
      * @api {get} /api/loadwhiteboard Get Whiteboard Data
@@ -58,11 +58,11 @@ function startBackendServer(port) {
      * @apiExample {curl} Example usage:
      *     curl -i http://[rootUrl]/api/loadwhiteboard?wid=[MyWhiteboardId]
      */
-    app.get("/api/loadwhiteboard", function (req, res) {
-        let query = escapeAllContentStrings(req["query"]);
-        const wid = query["wid"];
-        const at = query["at"]; //accesstoken
-        if (accessToken === "" || accessToken == at) {
+    app.get('/api/loadwhiteboard', function (req, res) {
+        let query = escapeAllContentStrings(req['query']);
+        const wid = query['wid'];
+        const at = query['at']; //accesstoken
+        if (accessToken === '' || accessToken == at) {
             const widForData = ReadOnlyBackendService.isReadOnly(wid)
                 ? ReadOnlyBackendService.getIdFromReadOnlyId(wid)
                 : wid;
@@ -90,11 +90,11 @@ function startBackendServer(port) {
      * @apiExample {curl} Example usage:
      *     curl -i http://[rootUrl]/api/getReadOnlyWid?wid=[MyWhiteboardId]
      */
-    app.get("/api/getReadOnlyWid", function (req, res) {
-        let query = escapeAllContentStrings(req["query"]);
-        const wid = query["wid"];
-        const at = query["at"]; //accesstoken
-        if (accessToken === "" || accessToken == at) {
+    app.get('/api/getReadOnlyWid', function (req, res) {
+        let query = escapeAllContentStrings(req['query']);
+        const wid = query['wid'];
+        const at = query['at']; //accesstoken
+        if (accessToken === '' || accessToken == at) {
             res.send(ReadOnlyBackendService.getReadOnlyId(wid));
             res.end();
         } else {
@@ -105,7 +105,7 @@ function startBackendServer(port) {
 
     /**
      * @api {post} /api/upload Upload Images
-     * @apiDescription Upload Image to the server. Note that you need to add the image to the board after upload by calling "drawToWhiteboard" with addImgBG set as tool
+     * @apiDescription Upload Image to the server. Note that you need to add the image to the board after upload by calling 'drawToWhiteboard' with addImgBG set as tool
      * @apiName upload
      * @apiGroup WhiteboardAPI
      *
@@ -115,10 +115,10 @@ function startBackendServer(port) {
      * @apiParam {Boolean} [webdavaccess] set true to upload to webdav (Optional; Only if activated for this server)
      * @apiParam {String} imagedata The imagedata base64 encoded
      *
-     * @apiSuccess {String} body returns "done"
+     * @apiSuccess {String} body returns 'done'
      * @apiError {Number} 401 Unauthorized
      */
-    app.post("/api/upload", function (req, res) {
+    app.post('/api/upload', function (req, res) {
         //File upload
         var form = new formidable.IncomingForm(); //Receive form
         var formData = {
@@ -126,30 +126,30 @@ function startBackendServer(port) {
             fields: {},
         };
 
-        form.on("file", function (name, file) {
-            formData["files"][file.name] = file;
+        form.on('file', function (name, file) {
+            formData['files'][file.name] = file;
         });
 
-        form.on("field", function (name, value) {
-            formData["fields"][name] = value;
+        form.on('field', function (name, value) {
+            formData['fields'][name] = value;
         });
 
-        form.on("error", function (err) {
-            console.log("File uplaod Error!");
+        form.on('error', function (err) {
+            console.log('File uplaod Error!');
         });
 
-        form.on("end", function () {
-            if (accessToken === "" || accessToken == formData["fields"]["at"]) {
+        form.on('end', function () {
+            if (accessToken === '' || accessToken == formData['fields']['at']) {
                 progressUploadFormData(formData, function (err) {
                     if (err) {
-                        if (err == "403") {
+                        if (err == '403') {
                             res.status(403);
                         } else {
                             res.status(500);
                         }
                         res.end();
                     } else {
-                        res.send("done");
+                        res.send('done');
                     }
                 });
             } else {
@@ -169,49 +169,49 @@ function startBackendServer(port) {
      *
      * @apiParam {Number} wid WhiteboardId you find in the Whiteboard URL
      * @apiParam {Number} [at] Accesstoken (Only if activated for this server)
-     * @apiParam {String} t The tool you want to use:  "line",
-     * "pen",
-     * "rect",
-     * "circle",
-     * "eraser",
-     * "addImgBG",
-     * "recSelect",
-     * "eraseRec",
-     * "addTextBox",
-     * "setTextboxText",
-     * "removeTextbox",
-     * "setTextboxPosition",
-     * "setTextboxFontSize",
-     * "setTextboxFontColor"
+     * @apiParam {String} t The tool you want to use:  'line',
+     * 'pen',
+     * 'rect',
+     * 'circle',
+     * 'eraser',
+     * 'addImgBG',
+     * 'recSelect',
+     * 'eraseRec',
+     * 'addTextBox',
+     * 'setTextboxText',
+     * 'removeTextbox',
+     * 'setTextboxPosition',
+     * 'setTextboxFontSize',
+     * 'setTextboxFontColor'
      * @apiParam {String} [username] The username performing this action. Only relevant for the undo/redo function
-     * @apiParam {Number} [draw] Only has a function if t is set to "addImgBG". Set 1 to draw on canvas; 0  to draw into background
-     * @apiParam {String} [url] Only has a function if t is set to "addImgBG", then it has to be set to: [rootUrl]/uploads/[ReadOnlyWid]/[ReadOnlyWid]_[date].png
+     * @apiParam {Number} [draw] Only has a function if t is set to 'addImgBG'. Set 1 to draw on canvas; 0  to draw into background
+     * @apiParam {String} [url] Only has a function if t is set to 'addImgBG', then it has to be set to: [rootUrl]/uploads/[ReadOnlyWid]/[ReadOnlyWid]_[date].png
      * @apiParam {String} [c] Color: Only used if color is needed (pen, rect, circle, addTextBox ... )
      * @apiParam {String} [th] Thickness: Only used if Thickness is needed (pen, rect ... )
      * @apiParam {Number[]} d has different function on every tool you use:
      * fx. pen or addImgBG: [width, height, left, top, rotation]
      *
-     * @apiSuccess {String} body returns "done" as text
+     * @apiSuccess {String} body returns 'done' as text
      * @apiError {Number} 401 Unauthorized
      */
-    app.get("/api/drawToWhiteboard", function (req, res) {
-        let query = escapeAllContentStrings(req["query"]);
-        const wid = query["wid"];
-        const at = query["at"]; //accesstoken
+    app.get('/api/drawToWhiteboard', function (req, res) {
+        let query = escapeAllContentStrings(req['query']);
+        const wid = query['wid'];
+        const at = query['at']; //accesstoken
         if (!wid || ReadOnlyBackendService.isReadOnly(wid)) {
             res.status(401); //Unauthorized
             res.end();
         }
 
-        if (accessToken === "" || accessToken == at) {
-            const broadcastTo = (wid) => io.compress(false).to(wid).emit("drawToWhiteboard", query);
+        if (accessToken === '' || accessToken == at) {
+            const broadcastTo = (wid) => io.compress(false).to(wid).emit('drawToWhiteboard', query);
             // broadcast to current whiteboard
             broadcastTo(wid);
             // broadcast the same query to the associated read-only whiteboard
             const readOnlyId = ReadOnlyBackendService.getReadOnlyId(wid);
             broadcastTo(readOnlyId);
             s_whiteboard.handleEventsAndData(query); //save whiteboardchanges on the server
-            res.send("done");
+            res.send('done');
         } else {
             res.status(401); //Unauthorized
             res.end();
@@ -219,39 +219,39 @@ function startBackendServer(port) {
     });
 
     function progressUploadFormData(formData, callback) {
-        console.log("Progress new Form Data");
+        console.log('Progress new Form Data');
         const fields = escapeAllContentStrings(formData.fields);
-        const wid = fields["wid"];
+        const wid = fields['wid'];
         if (ReadOnlyBackendService.isReadOnly(wid)) return;
 
         const readOnlyWid = ReadOnlyBackendService.getReadOnlyId(wid);
 
-        const date = fields["date"] || +new Date();
+        const date = fields['date'] || +new Date();
         const filename = `${readOnlyWid}_${date}.png`;
-        let webdavaccess = fields["webdavaccess"] || false;
+        let webdavaccess = fields['webdavaccess'] || false;
         try {
             webdavaccess = JSON.parse(webdavaccess);
         } catch (e) {
             webdavaccess = false;
         }
 
-        const savingDir = getSafeFilePath("public/uploads", readOnlyWid);
+        const savingDir = getSafeFilePath('public/uploads', readOnlyWid);
         fs.ensureDir(savingDir, function (err) {
             if (err) {
-                console.log("Could not create upload folder!", err);
+                console.log('Could not create upload folder!', err);
                 return;
             }
-            let imagedata = fields["imagedata"];
-            if (imagedata && imagedata != "") {
+            let imagedata = fields['imagedata'];
+            if (imagedata && imagedata != '') {
                 //Save from base64 data
                 imagedata = imagedata
-                    .replace(/^data:image\/png;base64,/, "")
-                    .replace(/^data:image\/jpeg;base64,/, "");
-                console.log(filename, "uploaded");
+                    .replace(/^data:image\/png;base64,/, '')
+                    .replace(/^data:image\/jpeg;base64,/, '');
+                console.log(filename, 'uploaded');
                 const savingPath = getSafeFilePath(savingDir, filename);
-                fs.writeFile(savingPath, imagedata, "base64", function (err) {
+                fs.writeFile(savingPath, imagedata, 'base64', function (err) {
                     if (err) {
-                        console.log("error", err);
+                        console.log('error', err);
                         callback(err);
                     } else {
                         if (webdavaccess) {
@@ -263,7 +263,7 @@ function startBackendServer(port) {
                                     webdavaccess,
                                     function (err) {
                                         if (err) {
-                                            console.log("error", err);
+                                            console.log('error', err);
                                             callback(err);
                                         } else {
                                             callback();
@@ -271,7 +271,7 @@ function startBackendServer(port) {
                                     }
                                 );
                             } else {
-                                callback("Webdav is not enabled on the server!");
+                                callback('Webdav is not enabled on the server!');
                             }
                         } else {
                             callback();
@@ -279,18 +279,18 @@ function startBackendServer(port) {
                     }
                 });
             } else {
-                callback("no imagedata!");
-                console.log("No image Data found for this upload!", filename);
+                callback('no imagedata!');
+                console.log('No image Data found for this upload!', filename);
             }
         });
     }
 
     function saveImageToWebdav(imagepath, filename, webdavaccess, callback) {
         if (webdavaccess) {
-            const webdavserver = webdavaccess["webdavserver"] || "";
-            const webdavpath = webdavaccess["webdavpath"] || "/";
-            const webdavusername = webdavaccess["webdavusername"] || "";
-            const webdavpassword = webdavaccess["webdavpassword"] || "";
+            const webdavserver = webdavaccess['webdavserver'] || '';
+            const webdavpath = webdavaccess['webdavpath'] || '/';
+            const webdavusername = webdavaccess['webdavusername'] || '';
+            const webdavpassword = webdavaccess['webdavpassword'] || '';
 
             const client = createClient(webdavserver, {
                 username: webdavusername,
@@ -299,36 +299,36 @@ function startBackendServer(port) {
             client
                 .getDirectoryContents(webdavpath)
                 .then((items) => {
-                    const cloudpath = webdavpath + "" + filename;
-                    console.log("webdav saving to:", cloudpath);
+                    const cloudpath = webdavpath + '' + filename;
+                    console.log('webdav saving to:', cloudpath);
                     fs.createReadStream(imagepath).pipe(client.createWriteStream(cloudpath));
                     callback();
                 })
                 .catch((error) => {
-                    callback("403");
-                    console.log("Could not connect to webdav!");
+                    callback('403');
+                    console.log('Could not connect to webdav!');
                 });
         } else {
-            callback("Error: no access data!");
+            callback('Error: no access data!');
         }
     }
 
-    io.on("connection", function (socket) {
+    io.on('connection', function (socket) {
         let whiteboardId = null;
-        socket.on("disconnect", function () {
+        socket.on('disconnect', function () {
             WhiteboardInfoBackendService.leave(socket.id, whiteboardId);
-            socket.compress(false).broadcast.to(whiteboardId).emit("refreshUserBadges", null); //Removes old user Badges
+            socket.compress(false).broadcast.to(whiteboardId).emit('refreshUserBadges', null); //Removes old user Badges
         });
 
-        socket.on("drawToWhiteboard", function (content) {
+        socket.on('drawToWhiteboard', function (content) {
             if (!whiteboardId || ReadOnlyBackendService.isReadOnly(whiteboardId)) return;
 
             content = escapeAllContentStrings(content);
             content = purifyEncodedStrings(content);
 
-            if (accessToken === "" || accessToken == content["at"]) {
+            if (accessToken === '' || accessToken == content['at']) {
                 const broadcastTo = (wid) =>
-                    socket.compress(false).broadcast.to(wid).emit("drawToWhiteboard", content);
+                    socket.compress(false).broadcast.to(wid).emit('drawToWhiteboard', content);
                 // broadcast to current whiteboard
                 broadcastTo(whiteboardId);
                 // broadcast the same content to the associated read-only whiteboard
@@ -336,16 +336,16 @@ function startBackendServer(port) {
                 broadcastTo(readOnlyId);
                 s_whiteboard.handleEventsAndData(content); //save whiteboardchanges on the server
             } else {
-                socket.emit("wrongAccessToken", true);
+                socket.emit('wrongAccessToken', true);
             }
         });
 
-        socket.on("joinWhiteboard", function (content) {
+        socket.on('joinWhiteboard', function (content) {
             content = escapeAllContentStrings(content);
-            if (accessToken === "" || accessToken == content["at"]) {
-                whiteboardId = content["wid"];
+            if (accessToken === '' || accessToken == content['at']) {
+                whiteboardId = content['wid'];
 
-                socket.emit("whiteboardConfig", {
+                socket.emit('whiteboardConfig', {
                     common: config.frontend,
                     whiteboardSpecific: {
                         correspondingReadOnlyWid:
@@ -355,17 +355,17 @@ function startBackendServer(port) {
                 });
 
                 socket.join(whiteboardId); //Joins room name=wid
-                const screenResolution = content["windowWidthHeight"];
+                const screenResolution = content['windowWidthHeight'];
                 WhiteboardInfoBackendService.join(socket.id, whiteboardId, screenResolution);
             } else {
-                socket.emit("wrongAccessToken", true);
+                socket.emit('wrongAccessToken', true);
             }
         });
 
-        socket.on("updateScreenResolution", function (content) {
+        socket.on('updateScreenResolution', function (content) {
             content = escapeAllContentStrings(content);
-            if (accessToken === "" || accessToken == content["at"]) {
-                const screenResolution = content["windowWidthHeight"];
+            if (accessToken === '' || accessToken == content['at']) {
+                const screenResolution = content['windowWidthHeight'];
                 WhiteboardInfoBackendService.setScreenResolution(
                     socket.id,
                     whiteboardId,
@@ -375,32 +375,46 @@ function startBackendServer(port) {
         });
     });
 
+    
+
+    // webchat service
     io.on('connection', (socket) => {
-        // webchat service
         const usernames = new Map();
         const clients = new Map();
+        let chatId = null;
 
-        // add new connection into map of clients
-        clients.set(socket, null);
+        socket.on("connectToChatRoom", (res) => {
+            // add new connection into map of clients
+            clients.set(socket, null);
 
-        // log connection event in the terminal
-        console.log("# New client connected");
-        console.log("-> Number of connections: ", clients.size, "\n");
-
-        // emit connection event
-        socket.emit("connection", null);
+            // log connection event in the terminal
+            console.log("# New client connected");
+            console.log("-> Number of connections: ", clients.size, "\n");
+            chatId = res.chatId;
+            socket.join(chatId);
+        });
 
         // save username information attached to clients map
         socket.on("defineUsername", (res) => {
-            clients.set(socket, res.username);
+            if (usernames.has(res.username)) return;
+
+            clients.set(res.username, res.username);
             const color = HelperBackendService.generateRandomColor();
             usernames.set(res.username, color);
         });
 
         // listen to message event and emit it to other clients
         socket.on("message", (res) => {
+            console.log(res.chatId, chatId);
+            // if (res.chatId !== chatId) return;
             const color = usernames.get(res.author);
-            io.emit("message", { ...res, color });
+            const broadcastTo = (chatId) =>
+                socket
+                    .compress(false)
+                    .broadcast.to(chatId)
+                    .emit("message", { ...res, color });
+            console.log("chat-id");
+            broadcastTo(chatId);
         });
 
         socket.on("disconnect", () => {
@@ -423,14 +437,14 @@ function startBackendServer(port) {
     function escapeAllContentStrings(content, cnt) {
         if (!cnt) cnt = 0;
 
-        if (typeof content === "string") {
+        if (typeof content === 'string') {
             return DOMPurify.sanitize(content);
         }
         for (var i in content) {
-            if (typeof content[i] === "string") {
+            if (typeof content[i] === 'string') {
                 content[i] = DOMPurify.sanitize(content[i]);
             }
-            if (typeof content[i] === "object" && cnt < 10) {
+            if (typeof content[i] === 'object' && cnt < 10) {
                 content[i] = escapeAllContentStrings(content[i], ++cnt);
             }
         }
@@ -439,47 +453,47 @@ function startBackendServer(port) {
 
     //Sanitize strings known to be encoded and decoded
     function purifyEncodedStrings(content) {
-        if (content.hasOwnProperty("t") && content["t"] === "setTextboxText") {
+        if (content.hasOwnProperty('t') && content['t'] === 'setTextboxText') {
             return purifyTextboxTextInContent(content);
         }
         return content;
     }
 
     function purifyTextboxTextInContent(content) {
-        const raw = content["d"][1];
+        const raw = content['d'][1];
         const decoded = base64decode(raw);
         const purified = DOMPurify.sanitize(decoded, {
-            ALLOWED_TAGS: ["div", "br"],
+            ALLOWED_TAGS: ['div', 'br'],
             ALLOWED_ATTR: [],
             ALLOW_DATA_ATTR: false,
         });
 
         if (purified !== decoded) {
-            console.warn("setTextboxText payload needed be DOMpurified");
-            console.warn("raw: " + removeControlCharactersForLogs(raw));
-            console.warn("decoded: " + removeControlCharactersForLogs(decoded));
-            console.warn("purified: " + removeControlCharactersForLogs(purified));
+            console.warn('setTextboxText payload needed be DOMpurified');
+            console.warn('raw: ' + removeControlCharactersForLogs(raw));
+            console.warn('decoded: ' + removeControlCharactersForLogs(decoded));
+            console.warn('purified: ' + removeControlCharactersForLogs(purified));
         }
 
-        content["d"][1] = base64encode(purified);
+        content['d'][1] = base64encode(purified);
         return content;
     }
 
     function base64encode(s) {
-        return Buffer.from(s, "utf8").toString("base64");
+        return Buffer.from(s, 'utf8').toString('base64');
     }
 
     function base64decode(s) {
-        return Buffer.from(s, "base64").toString("utf8");
+        return Buffer.from(s, 'base64').toString('utf8');
     }
 
     function removeControlCharactersForLogs(s) {
-        return s.replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
+        return s.replace(/[\u0000-\u001F\u007F-\u009F]/g, '');
     }
 
-    process.on("unhandledRejection", (error) => {
-        // Will print "unhandledRejection err is not defined"
-        console.log("unhandledRejection", error.message);
+    process.on('unhandledRejection', (error) => {
+        // Will print 'unhandledRejection err is not defined'
+        console.log('unhandledRejection', error.message);
     });
 }
 
