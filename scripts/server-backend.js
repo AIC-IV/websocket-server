@@ -33,16 +33,34 @@ function startBackendServer(port) {
             methods: ['GET', 'POST'],
         },
     });
+
     WhiteboardInfoBackendService.start(io);
 
     console.log('socketserver running on port:' + port);
 
     const { accessToken, enableWebdav } = config.backend;
 
-    //Expose static folders
+    // maping room id to Room object
+    const rooms = new Map();
+
+    // middleware
+    app.use((req, res, next) => {
+        const origin = req.headers.origin;
+        const allowedOrigins = [`http://${IP_ADDRESS}:3000`, "http://localhost:3000"];
+        if (allowedOrigins.includes(origin)) {
+            res.setHeader("Access-Control-Allow-Origin", origin);
+        }
+        res.append("Access-Control-Allow-Headers", "Content-Type");
+        next();
+    });
+
+    app.use(express.json());
+    app.use(express.urlencoded({ extended: true }));
+
+    // Expose static folders
     app.use(express.static(path.join(__dirname, '..', 'dist')));
     app.use('/uploads', express.static(path.join(__dirname, '..', 'public', 'uploads')));
-
+    
     /**
      * @api {get} /api/loadwhiteboard Get Whiteboard Data
      * @apiDescription This returns all the Available Data ever drawn to this Whiteboard
@@ -218,6 +236,19 @@ function startBackendServer(port) {
         }
     });
 
+    // create room and add it to the rooms array
+    app.post('/api/createRoom', function (req, res) {
+        console.log('Create room');
+    }); 
+
+    // check if room exists
+    app.get('/api/doesRoomExist', function(req, res) {
+        console.log('aaaa');
+        let query = escapeAllContentStrings(req['query']);
+        const id = query['id'];
+        res.send({ exists: rooms.has(id) });
+    });
+
     function progressUploadFormData(formData, callback) {
         console.log('Progress new Form Data');
         const fields = escapeAllContentStrings(formData.fields);
@@ -314,7 +345,8 @@ function startBackendServer(port) {
     }
 
     io.on('connection', function (socket) {
-        let whiteboardId = null;
+        let whiteboardId = null; 
+
         socket.on('disconnect', function () {
             WhiteboardInfoBackendService.leave(socket.id, whiteboardId);
             socket.compress(false).broadcast.to(whiteboardId).emit('refreshUserBadges', null); //Removes old user Badges
@@ -375,12 +407,12 @@ function startBackendServer(port) {
         });
     });
 
-    
 
     // webchat service
     io.on('connection', (socket) => {
         const usernames = new Map();
         const clients = new Map();
+
         let chatId = null;
 
         socket.on("connectToChatRoom", (res) => {
@@ -405,15 +437,14 @@ function startBackendServer(port) {
 
         // listen to message event and emit it to other clients
         socket.on("message", (res) => {
-            console.log(res.chatId, chatId);
-            // if (res.chatId !== chatId) return;
             const color = usernames.get(res.author);
+            console.log(res);
             const broadcastTo = (chatId) =>
                 socket
                     .compress(false)
                     .broadcast.to(chatId)
                     .emit("message", { ...res, color });
-            console.log("chat-id");
+            
             broadcastTo(chatId);
         });
 
