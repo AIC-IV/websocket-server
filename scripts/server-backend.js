@@ -1,10 +1,11 @@
-const IP_ADDRESS = '192.168.0.132';
+const IP_ADDRESS = '192.168.2.105';
 
 const path = require('path');
 
 const config = require('./config/config');
 const HelperBackendService = require('./services/HelperBackendService');
 const ReadOnlyBackendService = require('./services/ReadOnlyBackendService');
+const Room = require('./services/Room');
 const WhiteboardInfoBackendService = require('./services/WhiteboardInfoBackendService');
 const { getSafeFilePath } = require('./utils');
 
@@ -43,7 +44,7 @@ function startBackendServer(port) {
     // maping room id to Room object
     const rooms = new Map();
 
-    // middleware
+    // // middleware
     app.use((req, res, next) => {
         const origin = req.headers.origin;
         const allowedOrigins = [`http://${IP_ADDRESS}:3000`, "http://localhost:3000"];
@@ -238,16 +239,56 @@ function startBackendServer(port) {
 
     // create room and add it to the rooms array
     app.post('/api/createRoom', function (req, res) {
-        console.log('Create room');
+        try {
+            const roomName = req.body.roomName;
+            const isRoomPrivate = req.body.isRoomPrivate;
+            const owner = req.body.owner;
+            const room = new Room(roomName, isRoomPrivate, owner);
+            rooms.set(roomName, room);
+            res.send({ success: true });
+        } catch (e) {
+            res.send({ success: false });
+        }
     }); 
+
+    app.get('/api/roomInfo', function(req, res) {
+        let query = escapeAllContentStrings(req["query"]);
+        const id = query["id"];
+
+        if (doesRoomExist(id)) {
+            res.send({ success: true, room: rooms.get(id) })
+        } else {
+            res.send({ success: false, err: 'Room does not exist' });
+        }
+    });
+
+    app.post('/api/joinRoom', function(req, res) {
+        const id = req.body.roomId;
+        const username = req.body.username;
+        if (doesRoomExist(id)) {
+            const room = rooms.get(id);
+            const joined = room.joinRoom(username);
+            if (joined) {
+                const room = rooms.get(id);
+                res.send({ success: true, room });
+            } else {
+                res.send({ success: false, err: 'Could not join room' });
+            }
+        } else {
+            res.send({ success: false, err: "Room does not exist" });
+        }
+    });
 
     // check if room exists
     app.get('/api/doesRoomExist', function(req, res) {
-        console.log('aaaa');
         let query = escapeAllContentStrings(req['query']);
         const id = query['id'];
-        res.send({ exists: rooms.has(id) });
+        res.send({ exists: doesRoomExist(id) });
     });
+
+    function doesRoomExist(id) {
+        return rooms.has(id);
+    }
 
     function progressUploadFormData(formData, callback) {
         console.log('Progress new Form Data');
@@ -408,6 +449,29 @@ function startBackendServer(port) {
     });
 
 
+    io.on('connection', (socket) => {
+        let roomId = null;
+
+        socket.on('connectToRoom', (res) => {
+            console.log('Connected to room: ', res.roomId);
+            roomId = res.roomId;
+            socket.join(roomId);
+        })
+
+        socket.on('joinRoom', (res) => {
+            const players = rooms.get(roomId).players;
+            const broadcastTo = (roomId) =>
+                socket
+                    .compress(false)
+                    .broadcast.to(roomId)
+                    .emit("banana", { players });
+
+           broadcastTo(roomId);
+        })
+
+    });
+
+
     // webchat service
     io.on('connection', (socket) => {
         const usernames = new Map();
@@ -430,7 +494,7 @@ function startBackendServer(port) {
         socket.on("defineUsername", (res) => {
             if (usernames.has(res.username)) return;
 
-            clients.set(res.username, res.username);
+            clients.set(socket, res.username);
             const color = HelperBackendService.generateRandomColor();
             usernames.set(res.username, color);
         });
