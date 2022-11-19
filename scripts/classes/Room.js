@@ -1,5 +1,3 @@
-const { faPlaneDeparture } = require('@fortawesome/free-solid-svg-icons');
-
 class Room {
 
   constructor(roomName, isRoomPrivate, roomOwner) {

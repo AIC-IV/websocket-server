@@ -1,50 +1,46 @@
 const IP_ADDRESS = '192.168.2.105';
 
 const path = require('path');
-
 const config = require('./config/config');
+
+const { getSafeFilePath } = require('./utils');
+const { PreventXSS } = require('./utils/PreventXSS');
+const { Rooms } = require('./classes/Rooms');
+
 const HelperBackendService = require('./services/HelperBackendService');
 const ReadOnlyBackendService = require('./services/ReadOnlyBackendService');
-const Room = require('./services/Room');
 const WhiteboardInfoBackendService = require('./services/WhiteboardInfoBackendService');
-const { getSafeFilePath } = require('./utils');
 
 function startBackendServer(port) {
-    var fs = require('fs-extra');
-    var express = require('express');
-    var formidable = require('formidable'); //form upload processing
+    const fs = require("fs-extra");
+    const formidable = require("formidable"); 
+    const s_whiteboard = require("./s_whiteboard.js");
+    
+    const express = require("express");
+    const { createClient } = require("webdav");
 
-    const createDOMPurify = require('dompurify'); //Prevent xss
-    const { JSDOM } = require('jsdom');
-    const window = new JSDOM('').window;
-    const DOMPurify = createDOMPurify(window);
+    const rooms = new Rooms();
+    const preventXSS = new PreventXSS();
+    const { accessToken, enableWebdav } = config.backend;
 
-    const { createClient } = require('webdav');
+    const app = express();
+    const server = require("http").Server(app);
 
-    var s_whiteboard = require('./s_whiteboard.js');
-
-    var app = express();
-
-    var server = require('http').Server(app);
     server.listen(port);
-    var io = require('socket.io')(server, {
-        path: '/ws-api',
+
+    const io = require("socket.io")(server, {
+        path: "/ws-api",
         cors: {
-            origin: [`http://${IP_ADDRESS}:3000`, 'http://localhost:3000'],
-            methods: ['GET', 'POST'],
+            origin: [`http://${IP_ADDRESS}:3000`, "http://localhost:3000"],
+            methods: ["GET", "POST"],
         },
     });
 
     WhiteboardInfoBackendService.start(io);
 
-    console.log('socketserver running on port:' + port);
+    console.log("Socket server running on port:" + port);
 
-    const { accessToken, enableWebdav } = config.backend;
-
-    // maping room id to Room object
-    const rooms = new Map();
-
-    // // middleware
+    // Middleware
     app.use((req, res, next) => {
         const origin = req.headers.origin;
         const allowedOrigins = [`http://${IP_ADDRESS}:3000`, "http://localhost:3000"];
@@ -59,9 +55,171 @@ function startBackendServer(port) {
     app.use(express.urlencoded({ extended: true }));
 
     // Expose static folders
-    app.use(express.static(path.join(__dirname, '..', 'dist')));
-    app.use('/uploads', express.static(path.join(__dirname, '..', 'public', 'uploads')));
-    
+    app.use(express.static(path.join(__dirname, "..", "dist")));
+    app.use("/uploads", express.static(path.join(__dirname, "..", "public", "uploads")));
+
+    // ----------------------------------------------------------------------------------------------------------------------
+
+    // ROOM ROUTES
+    app.post("/api/createRoom", (req, res) => {
+        res.send(rooms.createRoom(req));
+    });
+
+    app.get("/api/roomInfo", (req, res) => {
+        res.send(rooms.getRoomInfo(req));
+    });
+
+    // app.get('/api/getRooms', getRooms);
+
+    app.post("/api/joinRoom", (req, res) => {
+        res.send(rooms.joinRoom(req));
+    });
+
+    app.get("/api/doesRoomExist", (req, res) => {
+        res.send(rooms.doesRoomExist(req));
+    });
+
+    // ROOM SERVICE
+    io.on("connection", (socket) => {
+        let roomId = null;
+
+        socket.on("connectToRoom", (res) => {
+            console.log("Connected to room: ", res.roomId);
+            roomId = res.roomId;
+            socket.join(roomId);
+        });
+
+        socket.on("joinRoom", (res) => {
+            if (!rooms.getRoom(roomId)) return;
+
+            const players = rooms.getRoom(roomId).players;
+            const broadcastTo = (roomId) =>
+                socket.compress(false).broadcast.to(roomId).emit("banana", { players });
+
+            broadcastTo(roomId);
+        });
+    });
+
+    // WEBCHAT SERVICE
+    io.on("connection", (socket) => {
+        const usernames = new Map();
+        const clients = new Map();
+
+        let chatId = null;
+
+        socket.on("connectToChatRoom", (res) => {
+            // add new connection into map of clients
+            clients.set(socket, null);
+
+            // log connection event in the terminal
+            console.log("# New client connected");
+            console.log("-> Number of connections: ", clients.size, "\n");
+            chatId = res.chatId;
+            socket.join(chatId);
+        });
+
+        // save username information attached to clients map
+        socket.on("defineUsername", (res) => {
+            if (usernames.has(res.username)) return;
+
+            clients.set(socket, res.username);
+            const color = HelperBackendService.generateRandomColor();
+            usernames.set(res.username, color);
+        });
+
+        // listen to message event and emit it to other clients
+        socket.on("message", (res) => {
+            const color = usernames.get(res.author);
+            const broadcastTo = (chatId) =>
+                socket
+                    .compress(false)
+                    .broadcast.to(chatId)
+                    .emit("message", { ...res, color });
+
+            broadcastTo(chatId);
+        });
+
+        socket.on("disconnect", () => {
+            // get username
+            const username = clients.get(socket);
+
+            // remove current socket from clients
+            clients.delete(socket);
+
+            // release current username
+            usernames.delete(username);
+
+            // log into terminal
+            console.log(`# Client '${username}' disconnected`);
+            console.log("-> Number of connections: ", clients.size, "\n");
+        });
+    });
+
+    // WHITEBOARD SERVICE
+    io.on("connection", (socket) => {
+        let whiteboardId = null;
+
+        socket.on("disconnect", function () {
+            WhiteboardInfoBackendService.leave(socket.id, whiteboardId);
+            socket.compress(false).broadcast.to(whiteboardId).emit("refreshUserBadges", null); //Removes old user Badges
+        });
+
+        socket.on("drawToWhiteboard", function (content) {
+            if (!whiteboardId || ReadOnlyBackendService.isReadOnly(whiteboardId)) return;
+
+            content = preventXSS.escapeAllContentStrings(content);
+            content = preventXSS.purifyEncodedStrings(content);
+
+            if (accessToken === "" || accessToken == content["at"]) {
+                const broadcastTo = (wid) =>
+                    socket.compress(false).broadcast.to(wid).emit("drawToWhiteboard", content);
+                // broadcast to current whiteboard
+                broadcastTo(whiteboardId);
+                // broadcast the same content to the associated read-only whiteboard
+                const readOnlyId = ReadOnlyBackendService.getReadOnlyId(whiteboardId);
+                broadcastTo(readOnlyId);
+                s_whiteboard.handleEventsAndData(content); //save whiteboardchanges on the server
+            } else {
+                socket.emit("wrongAccessToken", true);
+            }
+        });
+
+        socket.on("joinWhiteboard", function (content) {
+            content = preventXSS.escapeAllContentStrings(content);
+            if (accessToken === "" || accessToken == content["at"]) {
+                whiteboardId = content["wid"];
+                console.log("hereeee");
+                socket.emit("whiteboardConfig", {
+                    common: config.frontend,
+                    whiteboardSpecific: {
+                        correspondingReadOnlyWid:
+                            ReadOnlyBackendService.getReadOnlyId(whiteboardId),
+                        isReadOnly: ReadOnlyBackendService.isReadOnly(whiteboardId),
+                    },
+                });
+
+                socket.join(whiteboardId); //Joins room name=wid
+                const screenResolution = content["windowWidthHeight"];
+                WhiteboardInfoBackendService.join(socket.id, whiteboardId, screenResolution);
+            } else {
+                socket.emit("wrongAccessToken", true);
+            }
+        });
+
+        socket.on("updateScreenResolution", function (content) {
+            content = preventXSS.escapeAllContentStrings(content);
+            if (accessToken === "" || accessToken == content["at"]) {
+                const screenResolution = content["windowWidthHeight"];
+                WhiteboardInfoBackendService.setScreenResolution(
+                    socket.id,
+                    whiteboardId,
+                    screenResolution
+                );
+            }
+        });
+    });
+
+    // WHITEBOARD ROUTES
     /**
      * @api {get} /api/loadwhiteboard Get Whiteboard Data
      * @apiDescription This returns all the Available Data ever drawn to this Whiteboard
@@ -77,11 +235,11 @@ function startBackendServer(port) {
      * @apiExample {curl} Example usage:
      *     curl -i http://[rootUrl]/api/loadwhiteboard?wid=[MyWhiteboardId]
      */
-    app.get('/api/loadwhiteboard', function (req, res) {
-        let query = escapeAllContentStrings(req['query']);
-        const wid = query['wid'];
-        const at = query['at']; //accesstoken
-        if (accessToken === '' || accessToken == at) {
+    app.get("/api/loadwhiteboard", function (req, res) {
+        let query = preventXSS.escapeAllContentStrings(req["query"]);
+        const wid = query["wid"];
+        const at = query["at"]; //accesstoken
+        if (accessToken === "" || accessToken == at) {
             const widForData = ReadOnlyBackendService.isReadOnly(wid)
                 ? ReadOnlyBackendService.getIdFromReadOnlyId(wid)
                 : wid;
@@ -109,11 +267,11 @@ function startBackendServer(port) {
      * @apiExample {curl} Example usage:
      *     curl -i http://[rootUrl]/api/getReadOnlyWid?wid=[MyWhiteboardId]
      */
-    app.get('/api/getReadOnlyWid', function (req, res) {
-        let query = escapeAllContentStrings(req['query']);
-        const wid = query['wid'];
-        const at = query['at']; //accesstoken
-        if (accessToken === '' || accessToken == at) {
+    app.get("/api/getReadOnlyWid", function (req, res) {
+        let query = escapeAllContentStrings(req["query"]);
+        const wid = query["wid"];
+        const at = query["at"]; //accesstoken
+        if (accessToken === "" || accessToken == at) {
             res.send(ReadOnlyBackendService.getReadOnlyId(wid));
             res.end();
         } else {
@@ -137,38 +295,38 @@ function startBackendServer(port) {
      * @apiSuccess {String} body returns 'done'
      * @apiError {Number} 401 Unauthorized
      */
-    app.post('/api/upload', function (req, res) {
+    app.post("/api/upload", function (req, res) {
         //File upload
-        var form = new formidable.IncomingForm(); //Receive form
-        var formData = {
+        const form = new formidable.IncomingForm(); //Receive form
+        const formData = {
             files: {},
             fields: {},
         };
 
-        form.on('file', function (name, file) {
-            formData['files'][file.name] = file;
+        form.on("file", function (name, file) {
+            formData["files"][file.name] = file;
         });
 
-        form.on('field', function (name, value) {
-            formData['fields'][name] = value;
+        form.on("field", function (name, value) {
+            formData["fields"][name] = value;
         });
 
-        form.on('error', function (err) {
-            console.log('File uplaod Error!');
+        form.on("error", function (err) {
+            console.log("File uplaod Error!");
         });
 
-        form.on('end', function () {
-            if (accessToken === '' || accessToken == formData['fields']['at']) {
+        form.on("end", function () {
+            if (accessToken === "" || accessToken == formData["fields"]["at"]) {
                 progressUploadFormData(formData, function (err) {
                     if (err) {
-                        if (err == '403') {
+                        if (err == "403") {
                             res.status(403);
                         } else {
                             res.status(500);
                         }
                         res.end();
                     } else {
-                        res.send('done');
+                        res.send("done");
                     }
                 });
             } else {
@@ -213,117 +371,65 @@ function startBackendServer(port) {
      * @apiSuccess {String} body returns 'done' as text
      * @apiError {Number} 401 Unauthorized
      */
-    app.get('/api/drawToWhiteboard', function (req, res) {
-        let query = escapeAllContentStrings(req['query']);
-        const wid = query['wid'];
-        const at = query['at']; //accesstoken
+    app.get("/api/drawToWhiteboard", function (req, res) {
+        let query = escapeAllContentStrings(req["query"]);
+        const wid = query["wid"];
+        const at = query["at"]; //accesstoken
         if (!wid || ReadOnlyBackendService.isReadOnly(wid)) {
             res.status(401); //Unauthorized
             res.end();
         }
 
-        if (accessToken === '' || accessToken == at) {
-            const broadcastTo = (wid) => io.compress(false).to(wid).emit('drawToWhiteboard', query);
+        if (accessToken === "" || accessToken == at) {
+            const broadcastTo = (wid) => io.compress(false).to(wid).emit("drawToWhiteboard", query);
             // broadcast to current whiteboard
             broadcastTo(wid);
             // broadcast the same query to the associated read-only whiteboard
             const readOnlyId = ReadOnlyBackendService.getReadOnlyId(wid);
             broadcastTo(readOnlyId);
             s_whiteboard.handleEventsAndData(query); //save whiteboardchanges on the server
-            res.send('done');
+            res.send("done");
         } else {
             res.status(401); //Unauthorized
             res.end();
         }
     });
 
-    // create room and add it to the rooms array
-    app.post('/api/createRoom', function (req, res) {
-        try {
-            const roomName = req.body.roomName;
-            const isRoomPrivate = req.body.isRoomPrivate;
-            const owner = req.body.owner;
-            const room = new Room(roomName, isRoomPrivate, owner);
-            rooms.set(roomName, room);
-            res.send({ success: true });
-        } catch (e) {
-            res.send({ success: false });
-        }
-    }); 
-
-    app.get('/api/roomInfo', function(req, res) {
-        let query = escapeAllContentStrings(req["query"]);
-        const id = query["id"];
-
-        if (doesRoomExist(id)) {
-            res.send({ success: true, room: rooms.get(id) })
-        } else {
-            res.send({ success: false, err: 'Room does not exist' });
-        }
-    });
-
-    app.post('/api/joinRoom', function(req, res) {
-        const id = req.body.roomId;
-        const username = req.body.username;
-        if (doesRoomExist(id)) {
-            const room = rooms.get(id);
-            const joined = room.joinRoom(username);
-            if (joined) {
-                const room = rooms.get(id);
-                res.send({ success: true, room });
-            } else {
-                res.send({ success: false, err: 'Could not join room' });
-            }
-        } else {
-            res.send({ success: false, err: "Room does not exist" });
-        }
-    });
-
-    // check if room exists
-    app.get('/api/doesRoomExist', function(req, res) {
-        let query = escapeAllContentStrings(req['query']);
-        const id = query['id'];
-        res.send({ exists: doesRoomExist(id) });
-    });
-
-    function doesRoomExist(id) {
-        return rooms.has(id);
-    }
-
+    // WHITEBOARD HELPERS
     function progressUploadFormData(formData, callback) {
-        console.log('Progress new Form Data');
+        console.log("Progress new Form Data");
         const fields = escapeAllContentStrings(formData.fields);
-        const wid = fields['wid'];
+        const wid = fields["wid"];
         if (ReadOnlyBackendService.isReadOnly(wid)) return;
 
         const readOnlyWid = ReadOnlyBackendService.getReadOnlyId(wid);
 
-        const date = fields['date'] || +new Date();
+        const date = fields["date"] || +new Date();
         const filename = `${readOnlyWid}_${date}.png`;
-        let webdavaccess = fields['webdavaccess'] || false;
+        let webdavaccess = fields["webdavaccess"] || false;
         try {
             webdavaccess = JSON.parse(webdavaccess);
         } catch (e) {
             webdavaccess = false;
         }
 
-        const savingDir = getSafeFilePath('public/uploads', readOnlyWid);
+        const savingDir = getSafeFilePath("public/uploads", readOnlyWid);
         fs.ensureDir(savingDir, function (err) {
             if (err) {
-                console.log('Could not create upload folder!', err);
+                console.log("Could not create upload folder!", err);
                 return;
             }
-            let imagedata = fields['imagedata'];
-            if (imagedata && imagedata != '') {
+            let imagedata = fields["imagedata"];
+            if (imagedata && imagedata != "") {
                 //Save from base64 data
                 imagedata = imagedata
-                    .replace(/^data:image\/png;base64,/, '')
-                    .replace(/^data:image\/jpeg;base64,/, '');
-                console.log(filename, 'uploaded');
+                    .replace(/^data:image\/png;base64,/, "")
+                    .replace(/^data:image\/jpeg;base64,/, "");
+                console.log(filename, "uploaded");
                 const savingPath = getSafeFilePath(savingDir, filename);
-                fs.writeFile(savingPath, imagedata, 'base64', function (err) {
+                fs.writeFile(savingPath, imagedata, "base64", function (err) {
                     if (err) {
-                        console.log('error', err);
+                        console.log("error", err);
                         callback(err);
                     } else {
                         if (webdavaccess) {
@@ -335,7 +441,7 @@ function startBackendServer(port) {
                                     webdavaccess,
                                     function (err) {
                                         if (err) {
-                                            console.log('error', err);
+                                            console.log("error", err);
                                             callback(err);
                                         } else {
                                             callback();
@@ -343,7 +449,7 @@ function startBackendServer(port) {
                                     }
                                 );
                             } else {
-                                callback('Webdav is not enabled on the server!');
+                                callback("Webdav is not enabled on the server!");
                             }
                         } else {
                             callback();
@@ -351,18 +457,18 @@ function startBackendServer(port) {
                     }
                 });
             } else {
-                callback('no imagedata!');
-                console.log('No image Data found for this upload!', filename);
+                callback("no imagedata!");
+                console.log("No image Data found for this upload!", filename);
             }
         });
     }
 
     function saveImageToWebdav(imagepath, filename, webdavaccess, callback) {
         if (webdavaccess) {
-            const webdavserver = webdavaccess['webdavserver'] || '';
-            const webdavpath = webdavaccess['webdavpath'] || '/';
-            const webdavusername = webdavaccess['webdavusername'] || '';
-            const webdavpassword = webdavaccess['webdavpassword'] || '';
+            const webdavserver = webdavaccess["webdavserver"] || "";
+            const webdavpath = webdavaccess["webdavpath"] || "/";
+            const webdavusername = webdavaccess["webdavusername"] || "";
+            const webdavpassword = webdavaccess["webdavpassword"] || "";
 
             const client = createClient(webdavserver, {
                 username: webdavusername,
@@ -371,224 +477,23 @@ function startBackendServer(port) {
             client
                 .getDirectoryContents(webdavpath)
                 .then((items) => {
-                    const cloudpath = webdavpath + '' + filename;
-                    console.log('webdav saving to:', cloudpath);
+                    const cloudpath = webdavpath + "" + filename;
+                    console.log("webdav saving to:", cloudpath);
                     fs.createReadStream(imagepath).pipe(client.createWriteStream(cloudpath));
                     callback();
                 })
                 .catch((error) => {
-                    callback('403');
-                    console.log('Could not connect to webdav!');
+                    callback("403");
+                    console.log("Could not connect to webdav!");
                 });
         } else {
-            callback('Error: no access data!');
+            callback("Error: no access data!");
         }
     }
 
-    io.on('connection', function (socket) {
-        let whiteboardId = null; 
-
-        socket.on('disconnect', function () {
-            WhiteboardInfoBackendService.leave(socket.id, whiteboardId);
-            socket.compress(false).broadcast.to(whiteboardId).emit('refreshUserBadges', null); //Removes old user Badges
-        });
-
-        socket.on('drawToWhiteboard', function (content) {
-            if (!whiteboardId || ReadOnlyBackendService.isReadOnly(whiteboardId)) return;
-
-            content = escapeAllContentStrings(content);
-            content = purifyEncodedStrings(content);
-
-            if (accessToken === '' || accessToken == content['at']) {
-                const broadcastTo = (wid) =>
-                    socket.compress(false).broadcast.to(wid).emit('drawToWhiteboard', content);
-                // broadcast to current whiteboard
-                broadcastTo(whiteboardId);
-                // broadcast the same content to the associated read-only whiteboard
-                const readOnlyId = ReadOnlyBackendService.getReadOnlyId(whiteboardId);
-                broadcastTo(readOnlyId);
-                s_whiteboard.handleEventsAndData(content); //save whiteboardchanges on the server
-            } else {
-                socket.emit('wrongAccessToken', true);
-            }
-        });
-
-        socket.on('joinWhiteboard', function (content) {
-            content = escapeAllContentStrings(content);
-            if (accessToken === '' || accessToken == content['at']) {
-                whiteboardId = content['wid'];
-
-                socket.emit('whiteboardConfig', {
-                    common: config.frontend,
-                    whiteboardSpecific: {
-                        correspondingReadOnlyWid:
-                            ReadOnlyBackendService.getReadOnlyId(whiteboardId),
-                        isReadOnly: ReadOnlyBackendService.isReadOnly(whiteboardId),
-                    },
-                });
-
-                socket.join(whiteboardId); //Joins room name=wid
-                const screenResolution = content['windowWidthHeight'];
-                WhiteboardInfoBackendService.join(socket.id, whiteboardId, screenResolution);
-            } else {
-                socket.emit('wrongAccessToken', true);
-            }
-        });
-
-        socket.on('updateScreenResolution', function (content) {
-            content = escapeAllContentStrings(content);
-            if (accessToken === '' || accessToken == content['at']) {
-                const screenResolution = content['windowWidthHeight'];
-                WhiteboardInfoBackendService.setScreenResolution(
-                    socket.id,
-                    whiteboardId,
-                    screenResolution
-                );
-            }
-        });
-    });
-
-
-    io.on('connection', (socket) => {
-        let roomId = null;
-
-        socket.on('connectToRoom', (res) => {
-            console.log('Connected to room: ', res.roomId);
-            roomId = res.roomId;
-            socket.join(roomId);
-        })
-
-        socket.on('joinRoom', (res) => {
-            const players = rooms.get(roomId).players;
-            const broadcastTo = (roomId) =>
-                socket
-                    .compress(false)
-                    .broadcast.to(roomId)
-                    .emit("banana", { players });
-
-           broadcastTo(roomId);
-        })
-
-    });
-
-
-    // webchat service
-    io.on('connection', (socket) => {
-        const usernames = new Map();
-        const clients = new Map();
-
-        let chatId = null;
-
-        socket.on("connectToChatRoom", (res) => {
-            // add new connection into map of clients
-            clients.set(socket, null);
-
-            // log connection event in the terminal
-            console.log("# New client connected");
-            console.log("-> Number of connections: ", clients.size, "\n");
-            chatId = res.chatId;
-            socket.join(chatId);
-        });
-
-        // save username information attached to clients map
-        socket.on("defineUsername", (res) => {
-            if (usernames.has(res.username)) return;
-
-            clients.set(socket, res.username);
-            const color = HelperBackendService.generateRandomColor();
-            usernames.set(res.username, color);
-        });
-
-        // listen to message event and emit it to other clients
-        socket.on("message", (res) => {
-            const color = usernames.get(res.author);
-            console.log(res);
-            const broadcastTo = (chatId) =>
-                socket
-                    .compress(false)
-                    .broadcast.to(chatId)
-                    .emit("message", { ...res, color });
-            
-            broadcastTo(chatId);
-        });
-
-        socket.on("disconnect", () => {
-            // get username
-            const username = clients.get(socket);
-
-            // remove current socket from clients
-            clients.delete(socket);
-
-            // release current username
-            usernames.delete(username);
-
-            // log into terminal
-            console.log(`# Client '${username}' disconnected`);
-            console.log("-> Number of connections: ", clients.size, "\n");
-        });
-    });
-
-    //Prevent cross site scripting (xss)
-    function escapeAllContentStrings(content, cnt) {
-        if (!cnt) cnt = 0;
-
-        if (typeof content === 'string') {
-            return DOMPurify.sanitize(content);
-        }
-        for (var i in content) {
-            if (typeof content[i] === 'string') {
-                content[i] = DOMPurify.sanitize(content[i]);
-            }
-            if (typeof content[i] === 'object' && cnt < 10) {
-                content[i] = escapeAllContentStrings(content[i], ++cnt);
-            }
-        }
-        return content;
-    }
-
-    //Sanitize strings known to be encoded and decoded
-    function purifyEncodedStrings(content) {
-        if (content.hasOwnProperty('t') && content['t'] === 'setTextboxText') {
-            return purifyTextboxTextInContent(content);
-        }
-        return content;
-    }
-
-    function purifyTextboxTextInContent(content) {
-        const raw = content['d'][1];
-        const decoded = base64decode(raw);
-        const purified = DOMPurify.sanitize(decoded, {
-            ALLOWED_TAGS: ['div', 'br'],
-            ALLOWED_ATTR: [],
-            ALLOW_DATA_ATTR: false,
-        });
-
-        if (purified !== decoded) {
-            console.warn('setTextboxText payload needed be DOMpurified');
-            console.warn('raw: ' + removeControlCharactersForLogs(raw));
-            console.warn('decoded: ' + removeControlCharactersForLogs(decoded));
-            console.warn('purified: ' + removeControlCharactersForLogs(purified));
-        }
-
-        content['d'][1] = base64encode(purified);
-        return content;
-    }
-
-    function base64encode(s) {
-        return Buffer.from(s, 'utf8').toString('base64');
-    }
-
-    function base64decode(s) {
-        return Buffer.from(s, 'base64').toString('utf8');
-    }
-
-    function removeControlCharactersForLogs(s) {
-        return s.replace(/[\u0000-\u001F\u007F-\u009F]/g, '');
-    }
-
-    process.on('unhandledRejection', (error) => {
+    process.on("unhandledRejection", (error) => {
         // Will print 'unhandledRejection err is not defined'
-        console.log('unhandledRejection', error.message);
+        console.log("unhandledRejection", error.message);
     });
 }
 
