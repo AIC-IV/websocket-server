@@ -69,7 +69,9 @@ function startBackendServer(port) {
         res.send(rooms.getRoomInfo(req));
     });
 
-    // app.get('/api/getRooms', getRooms);
+    app.get('/api/getRooms', (req, res) => {
+        res.send(rooms.getRooms(req));
+    });
 
     app.post("/api/joinRoom", (req, res) => {
         res.send(rooms.joinRoom(req));
@@ -130,13 +132,27 @@ function startBackendServer(port) {
         // listen to message event and emit it to other clients
         socket.on("message", (res) => {
             const color = usernames.get(res.author);
-            const broadcastTo = (chatId) =>
+
+            const emitMessage = (chatId) =>
                 socket
                     .compress(false)
                     .broadcast.to(chatId)
                     .emit("message", { ...res, color });
 
-            broadcastTo(chatId);
+            if (res.guess) {
+                const room = rooms.getRoom(res.roomId);
+                const guessValidation = room.validateGuess(res.text);
+                if (guessValidation.match || guessValidation.message) {
+                    res.text = guessValidation.message;
+                    io.to(socket.id)
+                        .emit("attempt", { ...res, ...guessValidation });
+                } else {
+                    emitMessage(chatId);
+                }
+            } else {
+                emitMessage(chatId);
+            }
+
         });
 
         socket.on("disconnect", () => {

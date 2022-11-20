@@ -38,11 +38,11 @@ class Rooms {
 
   createRoom(req) {
     try {
-      const roomName = req.body.roomName;
-      const isRoomPrivate = req.body.isRoomPrivate;
+      const name = req.body.roomName;
+      const isPrivate = req.body.isRoomPrivate;
       const owner = req.body.owner;
-      const room = new Room(roomName, isRoomPrivate, owner);
-      this.rooms.set(roomName, room);
+      const room = new Room(name, isPrivate, owner);
+      this.rooms.set(name, room);
       return { success: true }
     } catch (e) {
       return { success: false }
@@ -66,6 +66,13 @@ class Rooms {
 
   checkRoomExistance(id) {
     return this.rooms.has(id);
+  }
+
+  getRooms(req) {
+    const roomsArr = Array.from(this.rooms.values());
+    const nonPrivateRooms = roomsArr.filter(room => !room.isPrivate);
+    console.log(nonPrivateRooms, roomsArr);
+    return { rooms: nonPrivateRooms };
   }
 
 }
