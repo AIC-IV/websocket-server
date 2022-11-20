@@ -85,6 +85,9 @@ function startBackendServer(port) {
     io.on("connection", (socket) => {
         let roomId = null;
 
+        // maps socket.id -> username
+        let connections = new Map();
+
         socket.on("connectToRoom", (res) => {
             console.log("Connected to room: ", res.roomId);
             roomId = res.roomId;
@@ -93,12 +96,42 @@ function startBackendServer(port) {
 
         socket.on("joinRoom", (res) => {
             if (!rooms.getRoom(roomId)) return;
-
-            const players = rooms.getRoom(roomId).players;
+            
+            connections.set(socket.id, res.username);
+            const players = rooms.getRoom(roomId).getPlayers();
             const broadcastTo = (roomId) =>
-                socket.compress(false).broadcast.to(roomId).emit("banana", { players });
+                socket.compress(false).broadcast.to(roomId).emit("updatePlayers", { players });
 
             broadcastTo(roomId);
+        });
+
+        socket.on("startGame", (res) => {
+            const room = rooms.getRoom(roomId);
+            room.setTheme(res.theme.toLowerCase());
+            room.startGame();
+
+            socket.compress(false).broadcast.to(roomId).emit('newTurn', { room });
+            io.to(socket.id).emit('newTurn', { room });
+        });
+
+        socket.on("disconnect", () => {
+            const username = connections.get(socket.id);
+            
+            const room = rooms.getRoom(roomId);
+            if (!room) return;
+
+            room.disconnectPlayer(username);
+
+            const broadcastTo = (roomId) =>
+                socket
+                    .compress(false)
+                    .broadcast.to(roomId)
+                    .emit("updatePlayers", { players: room.getPlayers() });
+
+            broadcastTo(roomId);
+
+            // remove current connection
+            connections.delete(socket.id);
         });
     });
 
@@ -141,8 +174,29 @@ function startBackendServer(port) {
 
             if (res.guess) {
                 const room = rooms.getRoom(res.roomId);
+
+                if (room.endGame) return;
+                if (room.playerInTurn.username === res.author) return;
+
                 const guessValidation = room.validateGuess(res.text);
                 if (guessValidation.match || guessValidation.message) {
+                    if (guessValidation.match) {
+                        room.addPoints(res.author);
+                        socket
+                            .compress(false)
+                            .broadcast.to(res.roomId)
+                            .emit("updatePlayers", { players: room.getPlayers() });
+
+                        if (room.didAllPlayersGuessCorrectly()) {
+                            room.nextTurn();
+                            if (room.endGame === true) {
+                                socket.compress(false).broadcast.to(res.roomId).emit("endGame", { room });
+                            } else {
+                                socket.compress(false).broadcast.to(res.roomId).emit("newTurn", { room });
+                            }
+                        }
+                    }
+
                     res.text = guessValidation.message;
                     io.to(socket.id)
                         .emit("attempt", { ...res, ...guessValidation });
@@ -204,7 +258,6 @@ function startBackendServer(port) {
             content = preventXSS.escapeAllContentStrings(content);
             if (accessToken === "" || accessToken == content["at"]) {
                 whiteboardId = content["wid"];
-                console.log("hereeee");
                 socket.emit("whiteboardConfig", {
                     common: config.frontend,
                     whiteboardSpecific: {

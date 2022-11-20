@@ -21,5 +21,31 @@ const levenshteinDistance = (str1 = "", str2 = "") => {
     return track[str2.length][str1.length];
 };
 
+const { animals } = require("../words/animals");
+const { food } = require("../words/food");
+const { objects } = require("../words/objects");
+const { verbs } = require("../words/verbs");
+const { professions } = require("../words/professions");
+const { places } = require("../words/places");
+const shuffle = require('shuffle-array');
 
-module.exports = { levenshteinDistance };
+const getSecretWords = (category) => {
+    switch (category) {
+        case "animais":
+            return shuffle(animals).slice(0, 30);
+        case "comida":
+            return shuffle(food).slice(0, 30);
+        case "objetos":
+            return shuffle(objects).slice(0, 30);
+        case "verbos":
+            return shuffle(verbs).slice(0, 30);
+        case "profissões":
+            return shuffle(professions).slice(0, 30);
+        case "lugares":
+            return shuffle(places).slice(0, 30);
+        default:
+            return "Envie uma categoria";
+    }
+};
+
+module.exports = { levenshteinDistance, getSecretWords };

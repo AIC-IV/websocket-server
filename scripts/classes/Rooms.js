@@ -27,7 +27,7 @@ class Rooms {
       const joined = room.joinRoom(username);
       if (joined) {
         const room = this.rooms.get(id);
-        return { success: true, room };
+        return { success: true, room, players: room.getPlayers() };
       } else {
         return { success: false, err: "Could not join room" };
       }
@@ -68,11 +68,14 @@ class Rooms {
     return this.rooms.has(id);
   }
 
-  getRooms(req) {
+  getRooms() {
     const roomsArr = Array.from(this.rooms.values());
-    const nonPrivateRooms = roomsArr.filter(room => !room.isPrivate);
-    console.log(nonPrivateRooms, roomsArr);
-    return { rooms: nonPrivateRooms };
+    return { rooms:
+        roomsArr
+        .filter(room => !room.isPrivate)
+        .filter(room => room.players.size < room.maxPlayers)
+        .map(room => { return { ...room, numOfPlayers: room.players.size } })
+    };
   }
 
 }
