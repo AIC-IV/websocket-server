@@ -22,9 +22,11 @@ class Rooms {
   joinRoom(req) {
     const id = req.body.roomId;
     const username = req.body.username;
+    const image = req.body.image;
+    console.log(image);
     if (this.checkRoomExistance(id)) {
       const room = this.rooms.get(id);
-      const joined = room.joinRoom(username);
+      const joined = room.joinRoom(username, image);
       if (joined) {
         const room = this.rooms.get(id);
         return { success: true, room, players: room.getPlayers() };

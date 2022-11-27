@@ -68,7 +68,7 @@ class Room {
     this.playersThatGuessedCorrectly = new Set();
   }
 
-  joinRoom(username) {
+  joinRoom(username, image) {
     if (this.players.has(username)) return true;
 
     if (this.disconnectedPlayers.has(username)) {
@@ -79,7 +79,7 @@ class Room {
     }
 
     if (this.players.size < this.maxPlayers) {
-      const player = new Player(username);
+      const player = new Player(username, image);
       this.players.set(username, player);
       if (this.currRound !== 0) this.playerOrder.push(username);
       return true;

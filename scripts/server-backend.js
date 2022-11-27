@@ -1,4 +1,4 @@
-const IP_ADDRESS = '192.168.2.105';
+const IP_ADDRESS = "192.168.2.107";
 
 const path = require('path');
 const config = require('./config/config');
@@ -99,6 +99,7 @@ function startBackendServer(port) {
             
             connections.set(socket.id, res.username);
             const players = rooms.getRoom(roomId).getPlayers();
+            console.log(players);
             const broadcastTo = (roomId) =>
                 socket.compress(false).broadcast.to(roomId).emit("updatePlayers", { players });
 
