@@ -96,8 +96,8 @@ class Room {
 
   getPoints() {
     const elapsedTime = Math.floor((Date.now() - this.roundStartTime) / 1000);
-    const guesser = Math.floor(this.guesserPoints / (elapsedTime * 0.8));
-    const playerInTurn = Math.floor(this.playerInTurnPoints / (elapsedTime * 2));
+    const guesser = Math.floor(this.guesserPoints / elapsedTime);
+    const playerInTurn = Math.floor(this.playerInTurnPoints / (elapsedTime * this.players.size));
     return [guesser, playerInTurn];
   }
 
