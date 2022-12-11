@@ -6,8 +6,9 @@ class Room {
     this.name = roomName;
     this.isPrivate = isPrivate;
     this.owner = roomOwner;
-    this.rounds = 2;
+    this.rounds = 5;
     this.currRound = 0;
+    this.roundStartTime;
     this.currPlayer = 0;
     this.playerInTurn = null;
     this.secretWord = "banana";
@@ -45,6 +46,7 @@ class Room {
   }
 
   nextRound() {
+    this.roundStartTime = Date.now();
     this.currRound++;
     this.currPlayer = 0;
     if (this.currRound >= this.rounds) {
@@ -60,8 +62,8 @@ class Room {
   }
 
   resetAvailablePoints() {
-    this.guesserPoints = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
-    this.playerInTurnPoints = 10;
+    this.guesserPoints = 100;
+    this.playerInTurnPoints = 50;
   }
 
   resetPlayersThatGuessedCorrectly() {
@@ -92,12 +94,19 @@ class Room {
     return Array.from(this.players.values());
   }
 
+  getPoints() {
+    const elapsedTime = Math.floor((Date.now() - this.roundStartTime) / 1000);
+    const guesser = this.guesserPoints / (elapsedTime * 3);
+    const drawer = this.playerInTurnPoints / (elapsedTime * 2);
+    return [guesser, drawer];
+  }
+
   addPoints(username) {
     if (this.playersThatGuessedCorrectly.has(username)) return false;
-
-    const points = this.guesserPoints.pop();
-    this.players.get(username).addPoints(points);
-    this.playerInTurn.addPoints(this.playerInTurnPoints);
+    const [guesser, drawer] = this.getPoints();
+    
+    this.players.get(username).addPoints(guesser);
+    this.playerInTurn.addPoints(drawer);
     this.playersThatGuessedCorrectly.add(username);
 
     return true;
