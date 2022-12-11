@@ -46,22 +46,22 @@ class Room {
   }
 
   nextRound() {
-    this.roundStartTime = Date.now();
     this.currRound++;
     this.currPlayer = 0;
     if (this.currRound >= this.rounds) {
       this.endGame =  true;
     }
   }
-
+  
   nextTurn() {
     this.nextPlayer();
     this.secretWord = this.secretWords.pop().toLowerCase().trim();
     this.resetAvailablePoints();
     this.resetPlayersThatGuessedCorrectly();
   }
-
+  
   resetAvailablePoints() {
+    this.roundStartTime = Date.now();
     this.guesserPoints = 1000;
     this.playerInTurnPoints = 1000;
   }
