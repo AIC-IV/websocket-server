@@ -1,4 +1,10 @@
-const IP_ADDRESS = "192.168.2.107";
+const IP_ADDRESS = "192.168.2.114";
+
+const origins = [
+    `http://${IP_ADDRESS}:3000`,
+    "http://localhost:3000",
+    "https://guess-the-drawing-frontend.herokuapp.com/",
+];
 
 const path = require('path');
 const config = require('./config/config');
@@ -31,7 +37,7 @@ function startBackendServer(port) {
     const io = require("socket.io")(server, {
         path: "/ws-api",
         cors: {
-            origin: [`http://${IP_ADDRESS}:3000`, "http://localhost:3000"],
+            origin: origins,
             methods: ["GET", "POST"],
         },
     });
@@ -43,7 +49,7 @@ function startBackendServer(port) {
     // Middleware
     app.use((req, res, next) => {
         const origin = req.headers.origin;
-        const allowedOrigins = [`http://${IP_ADDRESS}:3000`, "http://localhost:3000"];
+        const allowedOrigins = origins;
         if (allowedOrigins.includes(origin)) {
             res.setHeader("Access-Control-Allow-Origin", origin);
         }
