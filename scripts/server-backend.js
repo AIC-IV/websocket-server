@@ -3,7 +3,7 @@ const IP_ADDRESS = "192.168.2.114";
 const origins = [
     `http://${IP_ADDRESS}:3000`,
     "http://localhost:3000",
-    "https://guess-the-drawing-frontend.herokuapp.com/",
+    "https://guess-the-drawing-frontend.herokuapp.com",
 ];
 
 const path = require('path');
