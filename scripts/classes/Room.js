@@ -63,7 +63,7 @@ class Room {
 
   resetAvailablePoints() {
     this.guesserPoints = 1000;
-    this.playerInTurnPoints = 100;
+    this.playerInTurnPoints = 1000;
   }
 
   resetPlayersThatGuessedCorrectly() {
@@ -96,8 +96,8 @@ class Room {
 
   getPoints() {
     const elapsedTime = Math.floor((Date.now() - this.roundStartTime) / 1000);
-    const guesser = Math.floor(this.guesserPoints / (elapsedTime * 0.8));
-    const drawer = Math.floor(this.playerInTurnPoints / (elapsedTime * 0.7));
+    const guesser = Math.floor(this.guesserPoints / (elapsedTime * 0.7));
+    const drawer = Math.floor(this.playerInTurnPoints / (elapsedTime * 0.9));
     return [guesser, drawer];
   }
 
