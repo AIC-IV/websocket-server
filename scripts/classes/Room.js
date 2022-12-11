@@ -97,16 +97,16 @@ class Room {
   getPoints() {
     const elapsedTime = Math.floor((Date.now() - this.roundStartTime) / 1000);
     const guesser = Math.floor(this.guesserPoints / (elapsedTime * 0.7));
-    const drawer = Math.floor(this.playerInTurnPoints / (elapsedTime * 1.1));
-    return [guesser, drawer];
+    const playerInTurn = Math.floor(this.playerInTurnPoints / (elapsedTime * 1.5));
+    return [guesser, playerInTurn];
   }
 
   addPoints(username) {
     if (this.playersThatGuessedCorrectly.has(username)) return false;
-    const [guesser, drawer] = this.getPoints();
+    const [guesser, playerInTurn] = this.getPoints();
     
     this.players.get(username).addPoints(guesser);
-    this.playerInTurn.addPoints(drawer);
+    this.playerInTurn.addPoints(playerInTurn);
     this.playersThatGuessedCorrectly.add(username);
 
     return true;
