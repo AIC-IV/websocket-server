@@ -6,20 +6,25 @@ class Room {
     this.name = roomName;
     this.isPrivate = isPrivate;
     this.owner = roomOwner;
+    this.maxPlayers = 10;
     this.rounds = 5;
+    this.players = new Map();
+    this.disconnectedPlayers = new Map();
+    this.createInitialState();
+  }
+
+  createInitialState() {
     this.currRound = 0;
     this.roundStartTime;
     this.currPlayer = 0;
     this.playerInTurn = null;
-    this.secretWord = "banana";
-    this.maxPlayers = 10;
+    this.secretWord = '';
     this.theme = null;
-    this.players = new Map();
-    this.disconnectedPlayers = new Map();
-    this.playersThatGuessedCorrectly = new Set();
     this.secretWords = [];
     this.playerOrder = [];
     this.endGame = false;
+    this.disconnectedPlayers = new Map();
+    this.playersThatGuessedCorrectly = new Set();
   }
 
   startGame() {
@@ -139,6 +144,10 @@ class Room {
       const player = this.players.get(username);
       this.disconnectedPlayers.set(username, player);
       this.players.delete(username);
+      
+      if (this.owner === username) {
+        this.owner = Array.from(this.players.keys())[0] || null;
+      }   
       return true;
     }
 
@@ -147,6 +156,19 @@ class Room {
 
   setTheme(theme) {
     this.theme = theme;
+  }
+
+  cleanPlayerPoints(players) {
+    for (const player of players) {
+      player.resetPoints();
+    }
+  }
+
+  playAgain() {
+    this.createInitialState();
+    this.cleanPlayerPoints(this.players);
+    this.disconnectedPlayers = new Map();
+    this.startGame();
   }
 }
 

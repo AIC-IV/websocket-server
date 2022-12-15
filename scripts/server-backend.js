@@ -121,25 +121,44 @@ function startBackendServer(port) {
             io.to(socket.id).emit('newTurn', { room });
         });
 
+        socket.on("playAgain", () => {
+            const room = rooms.getRoom(roomId);
+            room.playAgain();
+            socket.compress(false).broadcast.to(roomId).emit("newGame", { room });
+            io.to(socket.id).emit("newGame", { room });
+        });
+
+        const deleteRoom = () => {
+            rooms.deleteRoom(roomId);
+            socket.compress(false).broadcast.to(roomId).emit("deleteRoom");
+            io.to(socket.id).emit("deleteRoom");
+        };
+
+        socket.on('deleteRoom', deleteRoom);
+
         socket.on("disconnect", () => {
             const username = connections.get(socket.id);
             
             const room = rooms.getRoom(roomId);
             if (!room) return;
-
+            
             room.disconnectPlayer(username);
-
-            const broadcastTo = (roomId) =>
-                socket
-                    .compress(false)
-                    .broadcast.to(roomId)
-                    .emit("updatePlayers", { players: room.getPlayers() });
-
-            broadcastTo(roomId);
-
+            if (room.owner === null) {
+                deleteRoom();
+            } else {
+                const broadcastTo = (roomId) =>
+                    socket
+                        .compress(false)
+                        .broadcast.to(roomId)
+                        .emit("updatePlayers", { players: room.getPlayers(), room: room });
+    
+                broadcastTo(roomId);
+            }
+            
             // remove current connection
             connections.delete(socket.id);
         });
+
     });
 
     // WEBCHAT SERVICE
@@ -170,7 +189,7 @@ function startBackendServer(port) {
         });
 
         // listen to message event and emit it to other clients
-        socket.on("message", (res) => {
+        socket.on("message", async (res) => {
             const color = usernames.get(res.author);
 
             const emitMessage = (chatId) =>
@@ -197,6 +216,14 @@ function startBackendServer(port) {
                         if (room.didAllPlayersGuessCorrectly()) {
                             room.nextTurn();
                             if (room.endGame === true) {
+                                const results = room.getResults();
+                                const body = {
+                                    results, 
+                                    matchId: room.id
+                                }
+                                const res = await fetch('https://guess-the-drawing-backend.herokuapp.com/history', { method: 'POST', body});
+                                const response = await res.json();
+                                console.log(response);
                                 socket.compress(false).broadcast.to(res.roomId).emit("endGame", { room });
                             } else {
                                 socket.compress(false).broadcast.to(res.roomId).emit("newTurn", { room });

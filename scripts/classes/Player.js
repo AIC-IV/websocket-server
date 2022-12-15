@@ -6,6 +6,10 @@ class Player {
     this.points = 0;
   }
 
+  resetPoints() {
+    this.points = 0;
+  }
+
   addPoints(points) {
     this.points += points;
   }

@@ -51,6 +51,10 @@ class Rooms {
     }
   }
 
+  deleteRoom(id) {
+    this.rooms.delete(id);
+  }
+
   getRoom(id) {
     if (this.rooms.has(id)) {
       return this.rooms.get(id);
