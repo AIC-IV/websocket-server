@@ -163,7 +163,7 @@ class Room {
       const p = { userId: player.id, points: player.getPoints(), placement: i+1 };
       matchResults.push(p);
     }
-    return results;
+    return matchResults;
   }
 
   setTheme(theme) {
