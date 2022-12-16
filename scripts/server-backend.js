@@ -219,8 +219,11 @@ function startBackendServer(port) {
                             if (room.endGame === true) {
                                 try {
                                     const results = room.getMatchResults();
-                                    console.log('a', results);
-                                    const options = { method: "POST", body: { results } };
+                                    const options = { 
+                                        method: "POST",
+                                        body: { results },
+                                        headers: { 'Content-Type': 'application/json' }
+                                    };
                                     console.log('b', options);
                                     const url = "https://guess-the-drawing-backend.herokuapp.com/history";
                                     const res = await fetch(url, options);
