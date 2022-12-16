@@ -1,3 +1,5 @@
+const fetch = (...args) => import("node-fetch").then(({ default: fetch }) => fetch(...args));
+
 const IP_ADDRESS = "192.168.2.114";
 
 const origins = [
@@ -6,22 +8,22 @@ const origins = [
     "https://guess-the-drawing-frontend.herokuapp.com",
 ];
 
-const path = require('path');
-const config = require('./config/config');
+const path = require("path");
+const config = require("./config/config");
 
-const { getSafeFilePath } = require('./utils');
-const { PreventXSS } = require('./utils/PreventXSS');
-const { Rooms } = require('./classes/Rooms');
+const { getSafeFilePath } = require("./utils");
+const { PreventXSS } = require("./utils/PreventXSS");
+const { Rooms } = require("./classes/Rooms");
 
-const HelperBackendService = require('./services/HelperBackendService');
-const ReadOnlyBackendService = require('./services/ReadOnlyBackendService');
-const WhiteboardInfoBackendService = require('./services/WhiteboardInfoBackendService');
+const HelperBackendService = require("./services/HelperBackendService");
+const ReadOnlyBackendService = require("./services/ReadOnlyBackendService");
+const WhiteboardInfoBackendService = require("./services/WhiteboardInfoBackendService");
 
 function startBackendServer(port) {
     const fs = require("fs-extra");
-    const formidable = require("formidable"); 
+    const formidable = require("formidable");
     const s_whiteboard = require("./s_whiteboard.js");
-    
+
     const express = require("express");
     const { createClient } = require("webdav");
 
@@ -75,7 +77,7 @@ function startBackendServer(port) {
         res.send(rooms.getRoomInfo(req));
     });
 
-    app.get('/api/getRooms', (req, res) => {
+    app.get("/api/getRooms", (req, res) => {
         res.send(rooms.getRooms(req));
     });
 
@@ -102,7 +104,7 @@ function startBackendServer(port) {
 
         socket.on("joinRoom", (res) => {
             if (!rooms.getRoom(roomId)) return;
-            
+
             connections.set(socket.id, res.username);
             const players = rooms.getRoom(roomId).getPlayers();
             console.log(players);
@@ -117,8 +119,8 @@ function startBackendServer(port) {
             room.setTheme(res.theme.toLowerCase());
             room.startGame();
 
-            socket.compress(false).broadcast.to(roomId).emit('newTurn', { room });
-            io.to(socket.id).emit('newTurn', { room });
+            socket.compress(false).broadcast.to(roomId).emit("newTurn", { room });
+            io.to(socket.id).emit("newTurn", { room });
         });
 
         socket.on("playAgain", () => {
@@ -134,14 +136,14 @@ function startBackendServer(port) {
             io.to(socket.id).emit("deleteRoom");
         };
 
-        socket.on('deleteRoom', deleteRoom);
+        socket.on("deleteRoom", deleteRoom);
 
         socket.on("disconnect", () => {
             const username = connections.get(socket.id);
-            
+
             const room = rooms.getRoom(roomId);
             if (!room) return;
-            
+
             room.disconnectPlayer(username);
             if (room.owner === null) {
                 deleteRoom();
@@ -151,14 +153,13 @@ function startBackendServer(port) {
                         .compress(false)
                         .broadcast.to(roomId)
                         .emit("updatePlayers", { players: room.getPlayers(), room: room });
-                
+
                 broadcastTo(roomId);
             }
-            
+
             // remove current connection
             connections.delete(socket.id);
         });
-
     });
 
     // WEBCHAT SERVICE
@@ -216,28 +217,38 @@ function startBackendServer(port) {
                         if (room.didAllPlayersGuessCorrectly()) {
                             room.nextTurn();
                             if (room.endGame === true) {
-                                const results = room.getMatchResults();
-                                const body = { results };
-                                const res = await fetch('https://guess-the-drawing-backend.herokuapp.com/history', { method: 'POST', body});
-                                const response = await res.json();
-                                console.log(response);
-                                socket.compress(false).broadcast.to(res.roomId).emit("endGame", { room });
+                                try {
+                                    const results = room.getMatchResults();
+                                    const options = { method: "POST", body: { results } };
+                                    const url = "https://guess-the-drawing-backend.herokuapp.com/history";
+                                    const res = await fetch(url, options);
+                                    const response = await res.json();
+                                    console.log(response);
+                                    socket
+                                        .compress(false)
+                                        .broadcast.to(res.roomId)
+                                        .emit("endGame", { room });
+
+                                } catch(e) {
+                                    console.log(err);
+                                }
                             } else {
-                                socket.compress(false).broadcast.to(res.roomId).emit("newTurn", { room });
+                                socket
+                                    .compress(false)
+                                    .broadcast.to(res.roomId)
+                                    .emit("newTurn", { room });
                             }
                         }
                     }
 
                     res.text = guessValidation.message;
-                    io.to(socket.id)
-                        .emit("attempt", { ...res, ...guessValidation });
+                    io.to(socket.id).emit("attempt", { ...res, ...guessValidation });
                 } else {
                     emitMessage(chatId);
                 }
             } else {
                 emitMessage(chatId);
             }
-
         });
 
         socket.on("disconnect", () => {
