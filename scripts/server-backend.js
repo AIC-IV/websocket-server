@@ -151,7 +151,7 @@ function startBackendServer(port) {
                         .compress(false)
                         .broadcast.to(roomId)
                         .emit("updatePlayers", { players: room.getPlayers(), room: room });
-    
+                
                 broadcastTo(roomId);
             }
             
@@ -216,11 +216,8 @@ function startBackendServer(port) {
                         if (room.didAllPlayersGuessCorrectly()) {
                             room.nextTurn();
                             if (room.endGame === true) {
-                                const results = room.getResults();
-                                const body = {
-                                    results, 
-                                    matchId: room.id
-                                }
+                                const results = room.getMatchResults();
+                                const body = { results };
                                 const res = await fetch('https://guess-the-drawing-backend.herokuapp.com/history', { method: 'POST', body});
                                 const response = await res.json();
                                 console.log(response);

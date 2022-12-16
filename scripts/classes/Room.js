@@ -75,7 +75,7 @@ class Room {
     this.playersThatGuessedCorrectly = new Set();
   }
 
-  joinRoom(username, image) {
+  joinRoom(username, userId, image) {
     if (this.players.has(username)) return true;
 
     if (this.disconnectedPlayers.has(username)) {
@@ -86,7 +86,7 @@ class Room {
     }
 
     if (this.players.size < this.maxPlayers) {
-      const player = new Player(username, image);
+      const player = new Player(username, userId, image);
       this.players.set(username, player);
       if (this.currRound !== 0) this.playerOrder.push(username);
       return true;
@@ -153,6 +153,17 @@ class Room {
     }
 
     return false;
+  }
+
+  getMatchResults() {
+    const players = Array.from(this.players.values());
+    players.sort((p1, p2) => p2.getPoints() - p1.getPoints());
+    const matchResults = [];
+    for (const [i, player] of players.entries()) {
+      const p = { userId: player.id, points: player.getPoints(), placement: i+1 };
+      matchResults.push(p);
+    }
+    return results;
   }
 
   setTheme(theme) {

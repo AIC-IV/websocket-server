@@ -20,15 +20,15 @@ class Rooms {
   };
 
   joinRoom(req) {
-    const id = req.body.roomId;
+    const roomId = req.body.roomId;
     const username = req.body.username;
     const image = req.body.image;
-    console.log(image);
-    if (this.checkRoomExistance(id)) {
-      const room = this.rooms.get(id);
-      const joined = room.joinRoom(username, image);
+    const userId = req.body.userId;
+    if (this.checkRoomExistance(roomId)) {
+      const room = this.rooms.get(roomId);
+      const joined = room.joinRoom(username, userId, image);
       if (joined) {
-        const room = this.rooms.get(id);
+        const room = this.rooms.get(roomId);
         return { success: true, room, players: room.getPlayers() };
       } else {
         return { success: false, err: "Could not join room" };

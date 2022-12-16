@@ -1,7 +1,8 @@
 class Player {
   
-  constructor(username, image) {
+  constructor(username, id, image) {
     this.username = username;
+    this.id = id;
     this.image = image;
     this.points = 0;
   }
