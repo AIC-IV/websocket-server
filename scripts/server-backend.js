@@ -224,11 +224,8 @@ function startBackendServer(port) {
                                         body: JSON.stringify({results}),
                                         headers: { "content-type": "application/json" },
                                     };
-                                    console.log('b', options);
                                     const url = "https://guess-the-drawing-backend.herokuapp.com/history";
-                                    const res = await fetch(url, options);
-                                    console.log('c', res);
-                                    console.log(res);
+                                    await fetch(url, options);
                                     socket
                                         .compress(false)
                                         .broadcast.to(res.roomId)
