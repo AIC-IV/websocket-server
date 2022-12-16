@@ -147,6 +147,7 @@ class Room {
       
       if (this.owner === username) {
         this.owner = Array.from(this.players.keys())[0] || null;
+        console.log('disconnecting: ', username, ' setting as owner: ', this.owner);
       }   
       return true;
     }
