@@ -221,33 +221,20 @@ function startBackendServer(port) {
                                     const results = room.getMatchResults();
                                     const options = {
                                         method: "POST",
-                                        body: JSON.stringify({ results }),
+                                        body: JSON.stringify({results}),
                                         headers: { "content-type": "application/json" },
                                     };
-                                    const url =
-                                        "https://guess-the-drawing-backend.herokuapp.com/history";
+                                    const url = "https://guess-the-drawing-backend.herokuapp.com/history";
                                     await fetch(url, options);
                                     socket
                                         .compress(false)
                                         .broadcast.to(res.roomId)
                                         .emit("endGame", { room });
-                                } catch (e) {
+
+                                } catch(e) {
                                     console.log(err);
                                 }
                             } else {
-                                const broadcastTo = (wid) =>
-                                    whiteboardSocket
-                                        .compress(false)
-                                        .broadcast.to(wid)
-                                        .emit("drawToWhiteboard", content);
-                                // broadcast to current whiteboard
-                                broadcastTo(res.roomId);
-                                // broadcast the same content to the associated read-only whiteboard
-                                const readOnlyId =
-                                    ReadOnlyBackendService.getReadOnlyId(res.roomId);
-                                broadcastTo(readOnlyId);
-                                s_whiteboard.handleEventsAndData(content); //save whiteboardchanges on the server
-                                
                                 socket
                                     .compress(false)
                                     .broadcast.to(res.roomId)
@@ -283,11 +270,8 @@ function startBackendServer(port) {
     });
 
     // WHITEBOARD SERVICE
-    let whiteboardSocket = null;
     io.on("connection", (socket) => {
         let whiteboardId = null;
-        
-        whiteboardSocket = socket;
 
         socket.on("disconnect", function () {
             WhiteboardInfoBackendService.leave(socket.id, whiteboardId);
