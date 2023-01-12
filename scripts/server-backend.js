@@ -235,6 +235,7 @@ function startBackendServer(port) {
                                     console.log(err);
                                 }
                             } else {
+                                s_whiteboard.handleEventsAndData({t: 'clear'});
                                 socket
                                     .compress(false)
                                     .broadcast.to(res.roomId)
